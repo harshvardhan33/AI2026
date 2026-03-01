@@ -13,7 +13,7 @@ async def fetch_data(param):
 
 
 async def main():
-    task1 = fetch_data(3)  # Could be awaited directly
+    task1 = fetch_data(1)  # Could be awaited directly
     task2 = fetch_data(3)  # Could be awaited directly
     result1 = await task1
     print("Task 1 fully completed")

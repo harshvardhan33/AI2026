@@ -9,7 +9,7 @@ def fetch_data(param):
 
 
 def main():
-    result1 = fetch_data(3)
+    result1 = fetch_data(1)
     print("Fetch 1 fully completed")
     result2 = fetch_data(3)
     print("Fetch 2 fully completed")

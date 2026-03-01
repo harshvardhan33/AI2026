@@ -10,7 +10,7 @@ async def fetch_data(param):
 
 
 async def main():
-    task1 = asyncio.create_task(fetch_data(3))
+    task1 = asyncio.create_task(fetch_data(1))
     task2 = asyncio.create_task(fetch_data(3))
     result1 = await task1
     print("Task 1 fully completed")
