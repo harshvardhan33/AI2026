@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Encrypted Vault</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Decoy overlay: shown when content should appear hidden -->
+  <div id="decoy-overlay" role="presentation" aria-hidden="true">
+    <p class="decoy-text">Nothing to see here.</p>
+    <p class="decoy-sub">Encrypted storage system v1.0</p>
+  </div>
+
+  <main id="app">
+
+    <!-- ── Upload section ── -->
+    <section id="upload-section">
+      <h1>Encrypted Vault</h1>
+      <p class="subtitle">
+        Files are encrypted at rest with AES-256-GCM.
+        Content is only decrypted on demand — hold to reveal.
+      </p>
+
+      <form id="upload-form" novalidate>
+        <input
+          type="file"
+          id="file-input"
+          accept="text/plain,image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/ogg,audio/wav,audio/webm,video/mp4,video/webm,video/ogg"
+          aria-label="Choose file to encrypt and store"
+          required
+        />
+        <button type="submit" class="btn-primary">Encrypt &amp; Store</button>
+      </form>
+      <div id="upload-status" role="status" aria-live="polite"></div>
+    </section>
+
+    <!-- ── File list section ── -->
+    <section id="files-section">
+      <div class="controls">
+        <h2 style="margin-bottom:0;border-bottom:none;">Stored Files</h2>
+        <button id="refresh-btn" aria-label="Refresh file list">↻ Refresh</button>
+      </div>
+      <ul id="file-list" aria-label="Encrypted files"></ul>
+    </section>
+
+    <!-- ── Reveal section ── -->
+    <section id="reveal-section" hidden>
+      <h2 id="reveal-title">
+        Revealing: <span id="reveal-filename"></span>
+      </h2>
+      <p class="hint">Hold the button below to decrypt and view. Release to wipe all content instantly.</p>
+
+      <!-- Hold-to-reveal button -->
+      <button
+        id="hold-btn"
+        aria-label="Hold to reveal encrypted content"
+      >
+        Hold to Reveal
+      </button>
+
+      <!-- Token TTL progress bar -->
+      <div id="ttl-bar-wrap" aria-hidden="true">
+        <div id="ttl-bar"></div>
+      </div>
+
+      <!-- Decrypted content renders here -->
+      <div
+        id="reveal-container"
+        class="blurred"
+        role="region"
+        aria-label="Revealed content"
+        aria-live="polite"
+      >
+        <p class="reveal-placeholder">Hold the button above to reveal content</p>
+      </div>
+
+      <button id="close-reveal-btn">✕ Close</button>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

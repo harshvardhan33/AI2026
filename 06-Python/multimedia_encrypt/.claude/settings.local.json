@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show:*)",
+      "Bash(pip3 show:*)",
+      "Bash(python -m venv venv)",
+      "Bash(venv/Scripts/pip install:*)",
+      "Bash(venv/Scripts/uvicorn app.main:app --reload --port 8000)",
+      "Bash(taskkill /F /IM uvicorn.exe)",
+      "Bash(taskkill /F /PID 34156)",
+      "Bash(taskkill /F /PID 32956)",
+      "Bash(taskkill /F /PID 33608)",
+      "Bash(curl:*)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :8000)",
+      "Bash(taskkill /F /PID 34156 /PID 33012 /PID 32956 /PID 33608 /PID 30820)",
+      "Bash(taskkill /F /PID 33012)",
+      "Bash(taskkill /F /PID 30820)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(taskkill //F //IM uvicorn.exe)",
+      "Bash(venv/Scripts/uvicorn app.main:app --reload --port 9000)"
+    ]
+  }
+}
