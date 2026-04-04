@@ -23,6 +23,17 @@ const revealContainer = document.getElementById("reveal-container");
 const closeRevealBtn  = document.getElementById("close-reveal-btn");
 const ttlBar          = document.getElementById("ttl-bar");
 
+// Analysis modal
+const analysisModal        = document.getElementById("analysis-modal");
+const analysisBackdrop     = document.getElementById("analysis-backdrop");
+const analysisModalTitle   = document.getElementById("analysis-modal-title");
+const analysisModalFilename= document.getElementById("analysis-modal-filename");
+const analysisPanelBody    = document.getElementById("analysis-panel-body");
+const analysisCloseBtn     = document.getElementById("analysis-close-btn");
+
+let analysisPollTimer   = null;
+let analysisCurrentFile = null;
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Upload
@@ -101,6 +112,12 @@ function renderFileList(files) {
         data-id="${escHtml(f.file_id)}"
         aria-label="Delete ${escHtml(f.original_filename)}"
       >Delete</button>
+      <button
+        class="btn-analysis"
+        data-id="${escHtml(f.file_id)}"
+        data-name="${escHtml(f.original_filename)}"
+        aria-label="AI analysis for ${escHtml(f.original_filename)}"
+      >Analysis</button>
     `;
     fileList.appendChild(li);
   }
@@ -115,6 +132,12 @@ fileList.addEventListener("click", async (e) => {
       mime_type:         btn.dataset.mime,
       total_chunks:      parseInt(btn.dataset.chunks, 10),
     });
+    return;
+  }
+
+  if (e.target.closest(".btn-analysis")) {
+    const btn = e.target.closest(".btn-analysis");
+    openAnalysisModal(btn.dataset.id, btn.dataset.name);
     return;
   }
 
@@ -135,6 +158,8 @@ fileList.addEventListener("click", async (e) => {
         revealSection.hidden = true;
         currentFile = null;
       }
+      // Close analysis modal if it's showing this file
+      if (analysisCurrentFile === fileId) closeAnalysisModal();
       await loadFileList();
     } catch (err) {
       alert(`Network error: ${err.message}`);
@@ -285,28 +310,16 @@ async function streamChunks(token, file) {
 }
 
 async function streamImage(token, file) {
-  // Collect all chunk ArrayBuffers, combine into a single Blob, render as <img>
-  const buffers = [];
+  // Fetch all chunks in parallel, then combine into a single Blob
+  const buffers = await fetchAllChunks(token, file);
+  if (!buffers) return;
 
-  for (let i = 0; i < file.total_chunks; i++) {
-    if (!holdActive) return; // user released during fetch
-
-    const buf = await fetchChunk(token, file.file_id, i);
-    if (buf === null) return; // error or token expired
-
-    buffers.push(buf);
-  }
-
-  if (!holdActive) return;
-
-  // Combine all chunk buffers into a single image Blob
   const blob = new Blob(buffers, { type: file.mime_type });
   const url  = URL.createObjectURL(blob);
 
-  const img = document.createElement("img");
-  img.alt   = `Revealed: ${file.original_filename}`;
-  img.src   = url;
-  // Revoke the object URL once the browser has read it into its image cache
+  const img   = document.createElement("img");
+  img.alt     = `Revealed: ${file.original_filename}`;
+  img.src     = url;
   img.onload  = () => URL.revokeObjectURL(url);
   img.onerror = () => URL.revokeObjectURL(url);
 
@@ -315,34 +328,25 @@ async function streamImage(token, file) {
 }
 
 async function streamText(token, file) {
-  // Decode each chunk progressively and append to a <pre> element.
-  // TextDecoder with { stream: true } handles multi-byte chars split across chunks.
+  // Fetch all chunks in parallel, then decode in order
+  const buffers = await fetchAllChunks(token, file);
+  if (!buffers) return;
+
   const decoder = new TextDecoder("utf-8");
-  const pre = document.createElement("pre");
+  const pre     = document.createElement("pre");
   revealContainer.innerHTML = "";
   revealContainer.appendChild(pre);
 
-  for (let i = 0; i < file.total_chunks; i++) {
-    if (!holdActive) return;
-
-    const buf = await fetchChunk(token, file.file_id, i);
-    if (buf === null) return;
-
-    const isLast = i === file.total_chunks - 1;
-    pre.textContent += decoder.decode(buf, { stream: !isLast });
+  for (let i = 0; i < buffers.length; i++) {
+    const isLast = i === buffers.length - 1;
+    pre.textContent += decoder.decode(buffers[i], { stream: !isLast });
   }
 }
 
 async function streamAudio(token, file) {
-  // Collect all chunks, combine into a Blob, render as <audio>
-  const buffers = [];
-  for (let i = 0; i < file.total_chunks; i++) {
-    if (!holdActive) return;
-    const buf = await fetchChunk(token, file.file_id, i);
-    if (buf === null) return;
-    buffers.push(buf);
-  }
-  if (!holdActive) return;
+  // Fetch all chunks in parallel, then combine into a Blob
+  const buffers = await fetchAllChunks(token, file);
+  if (!buffers) return;
 
   const blob = new Blob(buffers, { type: file.mime_type });
   const url  = URL.createObjectURL(blob);
@@ -359,15 +363,9 @@ async function streamAudio(token, file) {
 }
 
 async function streamVideo(token, file) {
-  // Collect all chunks, combine into a Blob, render as <video>
-  const buffers = [];
-  for (let i = 0; i < file.total_chunks; i++) {
-    if (!holdActive) return;
-    const buf = await fetchChunk(token, file.file_id, i);
-    if (buf === null) return;
-    buffers.push(buf);
-  }
-  if (!holdActive) return;
+  // Fetch all chunks in parallel, then combine into a Blob
+  const buffers = await fetchAllChunks(token, file);
+  if (!buffers) return;
 
   const blob = new Blob(buffers, { type: file.mime_type });
   const url  = URL.createObjectURL(blob);
@@ -381,6 +379,30 @@ async function streamVideo(token, file) {
   revealContainer.innerHTML = "";
   revealContainer.appendChild(video);
   video.play().catch(() => {});
+}
+
+async function fetchAllChunks(token, file) {
+  /**
+   * Fire all chunk requests in parallel (Promise.all).
+   * Returns an ordered array of ArrayBuffers, or null if any chunk failed
+   * or the user released hold mid-flight.
+   */
+  if (!holdActive) return null;
+
+  const promises = Array.from({ length: file.total_chunks }, (_, i) =>
+    fetchChunk(token, file.file_id, i)
+  );
+
+  const buffers = await Promise.all(promises);
+  if (!holdActive) return null;
+
+  const failedIdx = buffers.findIndex(b => b === null);
+  if (failedIdx !== -1) {
+    console.warn(`Chunk ${failedIdx} failed to load`);
+    return null;
+  }
+
+  return buffers;
 }
 
 async function fetchChunk(token, fileId, index) {
@@ -448,6 +470,163 @@ function formatBytes(n) {
   if (n < 1024)      return `${n} B`;
   if (n < 1048576)   return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1048576).toFixed(1)} MB`;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Analysis modal
+// ══════════════════════════════════════════════════════════════════════════════
+
+analysisCloseBtn.addEventListener("click", closeAnalysisModal);
+analysisBackdrop.addEventListener("click", closeAnalysisModal);
+
+function openAnalysisModal(fileId, filename) {
+  analysisCurrentFile = fileId;
+  analysisModalFilename.textContent = filename;
+  analysisPanelBody.innerHTML = '<p class="analysis-pending">Analysing… this may take a minute on first run (models are downloading).</p>';
+  analysisModal.hidden = false;
+  fetchAnalysis(fileId);
+}
+
+function closeAnalysisModal() {
+  if (analysisPollTimer) { clearTimeout(analysisPollTimer); analysisPollTimer = null; }
+  analysisModal.hidden = true;
+  analysisCurrentFile = null;
+}
+
+async function fetchAnalysis(fileId) {
+  if (analysisCurrentFile !== fileId) return;
+
+  let data;
+  try {
+    const res = await fetch(`${API}/files/${fileId}/analysis`);
+    if (res.status === 404) { closeAnalysisModal(); return; }
+    data = await res.json();
+  } catch (err) {
+    analysisPanelBody.innerHTML = `<p class="analysis-error">Network error: ${escHtml(err.message)}</p>`;
+    return;
+  }
+
+  if (data.status === "pending") {
+    analysisPanelBody.innerHTML = '<p class="analysis-pending">Analysing… check back in a moment.</p>';
+    analysisPollTimer = setTimeout(() => fetchAnalysis(fileId), 3000);
+    return;
+  }
+
+  if (data.status === "failed") {
+    analysisPanelBody.innerHTML = `<p class="analysis-error">Analysis failed: ${escHtml(data.error || "unknown error")}</p>`;
+    return;
+  }
+
+  renderAnalysisResult(data);
+}
+
+function renderAnalysisResult(data) {
+  const sections = [];
+
+  if (data.error) {
+    sections.push(`<p class="analysis-error">Error: ${escHtml(data.error)}</p>`);
+  }
+
+  // ── Text ──
+  if (data.type === "text") {
+    sections.push(aInfoRow("Words", data.word_count));
+    sections.push(aInfoRow("Characters", data.char_count));
+    if (data.summary) {
+      sections.push(aSection("Summary", `<p class="analysis-summary">${escHtml(data.summary)}</p>`));
+    }
+    if (data.entities && Object.keys(data.entities).length > 0) {
+      const rows = Object.entries(data.entities).map(([label, items]) =>
+        `<div class="entity-row">
+          <span class="entity-label">${escHtml(label)}</span>
+          <span class="entity-vals">${items.map(escHtml).join(", ")}</span>
+         </div>`
+      ).join("");
+      sections.push(aSection("Named Entities", rows));
+    }
+  }
+
+  // ── Audio ──
+  if (data.type === "audio") {
+    renderAudioFields(data, sections);
+  }
+
+  // ── Image ──
+  if (data.type === "image") {
+    if (data.image_size) sections.push(aInfoRow("Dimensions", `${data.image_size[0]} × ${data.image_size[1]} px`));
+    if (data.caption)    sections.push(aSection("AI Description", `<p class="analysis-caption">${escHtml(data.caption)}</p>`));
+    renderDetections(data.detections, sections);
+    if (data.ocr_text)   sections.push(aSection("OCR Text", `<pre>${escHtml(data.ocr_text)}</pre>`));
+  }
+
+  // ── Video ──
+  if (data.type === "video") {
+    sections.push(aInfoRow("Duration", `${data.duration_seconds}s`));
+    sections.push(aInfoRow("Frames analysed", data.frames_analyzed));
+    if (data.scene_captions && data.scene_captions.length > 0) {
+      const items = data.scene_captions.map((c, i) =>
+        `<div class="scene-caption"><span class="scene-num">Scene ${i + 1}</span>${escHtml(c)}</div>`
+      ).join("");
+      sections.push(aSection("Scene Descriptions (AI)", `<div class="scene-list">${items}</div>`));
+    }
+    renderDetections(data.detections, sections);
+    if (data.ocr_text) sections.push(aSection("OCR Text", `<pre>${escHtml(data.ocr_text)}</pre>`));
+    if (data.audio) {
+      sections.push(aSection("Audio Track", buildAudioHtml(data.audio)));
+    }
+  }
+
+  if (sections.length === 0) {
+    analysisPanelBody.innerHTML = '<p class="analysis-empty">No analysis data available.</p>';
+    return;
+  }
+  analysisPanelBody.innerHTML = sections.join("");
+}
+
+function renderAudioFields(a, sections) {
+  if (a.language) sections.push(aInfoRow("Language", a.language));
+  if (a.sentiment) {
+    const cls = a.sentiment.label === "positive" ? "sent-pos"
+              : a.sentiment.label === "negative" ? "sent-neg"
+              : "sent-neu";
+    sections.push(aInfoRow("Sentiment",
+      `<span class="sentiment-badge ${cls}">${escHtml(a.sentiment.label)}</span> `
+      + `<span class="sent-score">${(a.sentiment.score * 100).toFixed(1)}%</span>`
+    ));
+  }
+  if (a.transcript) sections.push(aSection("Transcript", `<pre>${escHtml(a.transcript)}</pre>`));
+  if (a.error)      sections.push(`<p class="analysis-error">${escHtml(a.error)}</p>`);
+}
+
+function buildAudioHtml(a) {
+  const parts = [];
+  if (a.language)   parts.push(`<p><strong>Language:</strong> ${escHtml(a.language)}</p>`);
+  if (a.sentiment)  parts.push(`<p><strong>Sentiment:</strong> ${escHtml(a.sentiment.label)} (${(a.sentiment.score * 100).toFixed(1)}%)</p>`);
+  if (a.transcript) parts.push(`<pre>${escHtml(a.transcript)}</pre>`);
+  if (a.error)      parts.push(`<p class="analysis-error">${escHtml(a.error)}</p>`);
+  return parts.join("") || "<p>No audio data.</p>";
+}
+
+function renderDetections(detections, sections) {
+  if (!detections || detections.length === 0) return;
+  const tags = detections.map(d =>
+    `<span class="det-tag">${escHtml(d.object)} <span class="det-conf">${(d.confidence * 100).toFixed(0)}%</span></span>`
+  ).join("");
+  sections.push(aSection("Detected Objects", `<div class="det-tags">${tags}</div>`));
+}
+
+function aSection(title, bodyHtml) {
+  return `<div class="analysis-sect">
+    <div class="analysis-sect-title">${escHtml(title)}</div>
+    <div class="analysis-sect-body">${bodyHtml}</div>
+  </div>`;
+}
+
+function aInfoRow(label, value) {
+  return `<div class="analysis-info-row">
+    <span class="analysis-info-label">${escHtml(label)}</span>
+    <span class="analysis-info-val">${escHtml(String(value))}</span>
+  </div>`;
 }
 
 

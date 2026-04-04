@@ -5,15 +5,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import files, reveal, upload
+from app.logger import get_logger, setup_logging
+from app.routers import analysis, files, reveal, upload
 from app.sessions import _sweep_loop
+
+setup_logging()
+log = get_logger("main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start background task that sweeps expired session tokens every 10 s
+    log.info("Application starting up — session sweep loop starting")
     task = asyncio.create_task(_sweep_loop())
     yield
+    log.info("Application shutting down")
     task.cancel()
     try:
         await task
@@ -37,9 +43,10 @@ app.add_middleware(
 )
 
 # API routes — registered before static mount so they take precedence
-app.include_router(upload.router, prefix="/api")
-app.include_router(files.router,  prefix="/api")
-app.include_router(reveal.router, prefix="/api")
+app.include_router(upload.router,   prefix="/api")
+app.include_router(files.router,    prefix="/api")
+app.include_router(reveal.router,   prefix="/api")
+app.include_router(analysis.router, prefix="/api")
 
 # Serve frontend from /static directory at root
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

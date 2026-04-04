@@ -27,3 +27,10 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
+
+# Atomic write temp files (storage.py)
+*.tmp
+
+# Model caches (downloaded on first use, not part of source)
+.ultralytics/

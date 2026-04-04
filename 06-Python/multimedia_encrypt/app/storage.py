@@ -1,4 +1,5 @@
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -131,6 +132,30 @@ def file_exists(file_id: str) -> bool:
 
 def chunk_exists(file_id: str, chunk_index: int) -> bool:
     return _chunk_path(file_id, chunk_index).exists()
+
+
+# ── Analysis helpers ──────────────────────────────────────────────────────────
+
+def _analysis_path(file_id: str) -> Path:
+    return _file_dir(file_id) / "analysis.json"
+
+
+def save_analysis(file_id: str, data: dict) -> None:
+    """Atomically write analysis.json via a temp-file swap."""
+    target = _analysis_path(file_id)
+    tmp    = target.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    os.replace(tmp, target)
+
+
+def load_analysis(file_id: str) -> dict:
+    path = _analysis_path(file_id)
+    if not path.exists():
+        return {"status": "pending"}
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {"status": "pending"}
 
 
 def delete_file(file_id: str) -> None:

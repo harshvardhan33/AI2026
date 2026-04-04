@@ -50,6 +50,20 @@
     </section>
 
     <!-- ── Reveal section ── -->
+    <!-- ── Analysis modal ── -->
+    <div id="analysis-modal" hidden role="dialog" aria-modal="true" aria-labelledby="analysis-modal-title">
+      <div id="analysis-backdrop"></div>
+      <div id="analysis-panel">
+        <div id="analysis-panel-header">
+          <span id="analysis-modal-title">AI Analysis</span>
+          <button id="analysis-close-btn" aria-label="Close analysis">✕</button>
+        </div>
+        <p id="analysis-modal-filename"></p>
+        <div id="analysis-panel-body"></div>
+      </div>
+    </div>
+
+    <!-- ── Reveal section ── -->
     <section id="reveal-section" hidden>
       <h2 id="reveal-title">
         Revealing: <span id="reveal-filename"></span>

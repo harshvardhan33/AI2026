@@ -18,7 +18,22 @@
       "Bash(taskkill /F /PID 30820)",
       "Bash(taskkill //F //IM python.exe)",
       "Bash(taskkill //F //IM uvicorn.exe)",
-      "Bash(venv/Scripts/uvicorn app.main:app --reload --port 9000)"
+      "Bash(venv/Scripts/uvicorn app.main:app --reload --port 9000)",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(python:*)",
+      "Bash(venv/Scripts/python -c \"import langgraph; from langgraph.graph import StateGraph, END; print\\('LangGraph', langgraph.__version__, 'OK'\\)\")",
+      "Bash(venv/Scripts/python -c \"import fastapi; import cryptography; print\\('venv OK'\\)\")",
+      "Bash(venv/Scripts/pip list:*)",
+      "Bash(venv/Scripts/python -c \"import asyncio; t = asyncio.create_task; print\\('asyncio create_task OK'\\)\")",
+      "Bash(venv/Scripts/python -c ':*)",
+      "Bash(ffmpeg -version)",
+      "Bash(tesseract --version)",
+      "Bash(where.exe ffmpeg:*)",
+      "Bash(where.exe tesseract:*)",
+      "Read(//c/Program Files/Tesseract-OCR/**)",
+      "Read(//c/ffmpeg/bin/**)",
+      "Read(//c/Program Files/ffmpeg/bin/**)",
+      "Bash(export PATH=\"$PATH:/c/Users/pc/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-8.1-full_build/bin\")"
     ]
   }
 }
