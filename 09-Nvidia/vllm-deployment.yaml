@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-chat-1b
+  labels: {app: vllm-chat-1b}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: vllm-chat-1b}
+  template:
+    metadata:
+      labels: {app: vllm-chat-1b}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      nodeSelector: {accelerator: gpu}
+      containers:
+        - name: vllm
+          image: registry.internal/ml-platform/vllm-server:v0.19.0
+          args: [
+            "--model", "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+            "--host", "0.0.0.0", "--port", "8000",
+            "--max-model-len", "4096",
+            "--gpu-memory-utilization", "0.85",
+            "--enable-prefix-caching",
+            "--max-num-seqs", "256"
+          ]
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: 24Gi
+              cpu: "8"
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 60    # vLLM model load takes ~60s
+            periodSeconds: 10
+          livenessProbe:
+            # Use the completions endpoint as a liveness probe — a real generation
+            # exercises the whole inference path, not just an HTTP handler.
+            httpGet: {path: /v1/completions, port: 8000}
+            initialDelaySeconds: 180
+            periodSeconds: 60
+            failureThreshold: 3
+          ports:
+            - containerPort: 8000
